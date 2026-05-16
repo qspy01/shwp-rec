@@ -31,3 +31,6 @@ if (!result.success) {
 }
 
 export const env: Env = result.data;
+
+export { createLogger } from './logger';
+export type { Logger } from './logger';

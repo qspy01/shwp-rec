@@ -1,6 +1,9 @@
 import { Queue } from 'bullmq';
 import { prisma } from '@shwp-rec/db';
 import { REDIS_CONFIG, RECORD_QUEUE_NAME, PROCESS_QUEUE_NAME, RecordStreamJobData } from '@shwp-rec/queue';
+import { createLogger } from '@shwp-rec/config';
+
+const log = createLogger('service-scheduler');
 
 const SCAN_INTERVAL_MS = 60000; // 1 minute
 
@@ -9,10 +12,10 @@ const recordQueue = new Queue<RecordStreamJobData>(RECORD_QUEUE_NAME, {
 });
 
 async function runScan() {
-  console.log('[Scheduler] Starting scan...');
+  log.info('Starting scan');
 
   try {
-    console.log('[Scheduler] Loading homepage...');
+    log.info('Loading homepage');
     const res = await fetch('https://showup.tv', {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; bot)' },
     });
@@ -20,16 +23,16 @@ async function runScan() {
 
     const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
     if (!match) {
-      console.error('[Scheduler] Could not find __NEXT_DATA__ in homepage');
+      log.error('Could not find __NEXT_DATA__ in homepage');
       return;
     }
 
     const data = JSON.parse(match[1]);
     const list = data?.props?.pageProps?.homeListData?.list || [];
-    
+
     // Filter for online females
     const females = list.filter((item: any) => item.host?.gender === 'FEMALE');
-    console.log(`[Scheduler] Found ${females.length} online females on homepage.`);
+    log.info({ count: females.length }, 'Found online models');
 
     // Find models currently being recorded
     const activeStreams = await prisma.stream.findMany({
@@ -73,15 +76,15 @@ async function runScan() {
           removeOnComplete: true,
         });
 
-        console.log(`[Scheduler] Enqueued recording for ${username}`);
+        log.info({ username }, 'Enqueued recording');
         enqueuedCount++;
       }
     }
 
-    console.log(`[Scheduler] Scan complete. Enqueued ${enqueuedCount} new streams.`);
+    log.info({ enqueuedCount }, 'Scan complete');
 
   } catch (error) {
-    console.error('[Scheduler] Error during scan:', error);
+    log.error({ err: error }, 'Error during scan');
   }
 }
 
@@ -91,21 +94,21 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 
 async function start() {
-  console.log(`[Scheduler] Service started. Redis host: ${REDIS_CONFIG.host}:${REDIS_CONFIG.port}`);
-  
+  log.info({ redisHost: REDIS_CONFIG.host, redisPort: REDIS_CONFIG.port }, 'Service started');
+
   const processQueue = new Queue(PROCESS_QUEUE_NAME, { connection: REDIS_CONFIG });
-  
+
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath('/admin/queues');
   createBullBoard({
     queues: [new BullMQAdapter(recordQueue), new BullMQAdapter(processQueue)],
     serverAdapter: serverAdapter,
   });
-  
+
   const app = express();
   app.use('/admin/queues', serverAdapter.getRouter());
   app.listen(3001, () => {
-    console.log('[Scheduler] Bull Board UI running on http://localhost:3001/admin/queues');
+    log.info({ url: 'http://localhost:3001/admin/queues' }, 'Bull Board UI running');
   });
 
   // Initial scan
@@ -113,19 +116,22 @@ async function start() {
 
   // Schedule loop
   setInterval(() => {
-    runScan().catch(console.error);
+    runScan().catch(err => log.error({ err }, 'Unhandled scan error'));
   }, SCAN_INTERVAL_MS);
 
   process.on('SIGTERM', async () => {
-    console.log('[Scheduler] SIGTERM received. Closing...');
+    log.info('SIGTERM received, closing');
     await recordQueue.close();
     process.exit(0);
   });
   process.on('SIGINT', async () => {
-    console.log('[Scheduler] SIGINT received. Closing...');
+    log.info('SIGINT received, closing');
     await recordQueue.close();
     process.exit(0);
   });
 }
 
-start().catch(console.error);
+start().catch(err => {
+  log.fatal({ err }, 'Failed to start service');
+  process.exit(1);
+});

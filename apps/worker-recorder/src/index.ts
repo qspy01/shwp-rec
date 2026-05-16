@@ -3,13 +3,15 @@ import { chromium } from 'playwright-extra';
 import stealth from 'puppeteer-extra-plugin-stealth';
 import { prisma } from '@shwp-rec/db';
 import { REDIS_CONFIG, RECORD_QUEUE_NAME, PROCESS_QUEUE_NAME, RecordStreamJobData, ProcessMediaJobData } from '@shwp-rec/queue';
-import { env } from '@shwp-rec/config';
+import { env, createLogger } from '@shwp-rec/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
+const log = createLogger('worker-recorder');
+
 chromium.use(stealth());
 
-const CAPTURE_DIR = '/tmp/shwp/captures';
+const CAPTURE_DIR = env.CAPTURE_DIR;
 if (!fs.existsSync(CAPTURE_DIR)) {
   fs.mkdirSync(CAPTURE_DIR, { recursive: true });
 }
@@ -20,7 +22,7 @@ const processQueue = new Queue<ProcessMediaJobData>(PROCESS_QUEUE_NAME, {
 
 async function processRecordJob(job: Job<RecordStreamJobData>) {
   const { username, streamId } = job.data;
-  console.log(`[Recorder] Starting job for ${username} (Stream: ${streamId})`);
+  log.info({ username, streamId }, 'Starting job');
 
   const rawFilePath = path.join(CAPTURE_DIR, `${streamId}.raw.mp4`);
   const fileStream = fs.createWriteStream(rawFilePath);
@@ -34,7 +36,7 @@ async function processRecordJob(job: Job<RecordStreamJobData>) {
 
   page.on('websocket', ws => {
     if (!ws.url().includes('storm')) return;
-    console.log(`[Recorder] Connected to Storm WS for ${username}`);
+    log.info({ username, streamId }, 'Connected to Storm WS');
 
     ws.on('framereceived', frame => {
       const payload = frame.payload;
@@ -52,7 +54,7 @@ async function processRecordJob(job: Job<RecordStreamJobData>) {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
     });
-    
+
     // Dismiss the 18+ warning if present
     try {
       await page.click('button:has-text("Wchodzę")', { timeout: 3000 });
@@ -62,7 +64,7 @@ async function processRecordJob(job: Job<RecordStreamJobData>) {
     await new Promise<void>((resolve, reject) => {
       const interval = setInterval(() => {
         if (Date.now() - lastChunkTime > 90000) {
-          console.log(`[Recorder] No data for 90s. Stream ended for ${username}`);
+          log.info({ username, streamId }, 'No data for 90s, stream ended');
           streamEnded = true;
           clearInterval(interval);
           resolve();
@@ -72,7 +74,7 @@ async function processRecordJob(job: Job<RecordStreamJobData>) {
       // Handle page crash/close
       page.on('close', () => {
         if (!streamEnded) {
-          console.warn(`[Recorder] Page closed unexpectedly for ${username}`);
+          log.warn({ username, streamId }, 'Page closed unexpectedly');
           clearInterval(interval);
           reject(new Error('Page closed'));
         }
@@ -80,27 +82,24 @@ async function processRecordJob(job: Job<RecordStreamJobData>) {
     });
 
   } catch (error) {
-    console.error(`[Recorder] Error recording ${username}:`, error);
+    log.error({ username, streamId, err: error }, 'Error recording');
     throw error;
   } finally {
     fileStream.end();
     await browser.close();
   }
 
-  // Finalize
-  console.log(`[Recorder] Finalized ${username}. Saved ${byteCount} bytes.`);
-  
+  log.info({ username, streamId, byteCount }, 'Recording finalized');
+
   if (byteCount > 1024 * 1024) { // Only process if > 1MB
-    // Update DB
     await prisma.stream.update({
       where: { id: streamId },
-      data: { 
+      data: {
         status: 'PROCESSING',
         endTime: new Date(),
       },
     });
 
-    // Enqueue process job
     await processQueue.add('process', {
       streamId,
       modelUsername: username,
@@ -108,7 +107,7 @@ async function processRecordJob(job: Job<RecordStreamJobData>) {
       jobId: streamId,
       removeOnComplete: true,
     });
-    console.log(`[Recorder] Enqueued process job for ${username}`);
+    log.info({ username, streamId }, 'Enqueued process job');
   } else {
     // File too small, likely offline
     fs.unlinkSync(rawFilePath);
@@ -116,7 +115,7 @@ async function processRecordJob(job: Job<RecordStreamJobData>) {
       where: { id: streamId },
       data: { status: 'FAILED' },
     });
-    console.log(`[Recorder] Recording too small, discarded for ${username}`);
+    log.info({ username, streamId, byteCount }, 'Recording too small, discarded');
   }
 }
 
@@ -130,19 +129,19 @@ const worker = new Worker<RecordStreamJobData>(
 );
 
 worker.on('completed', job => {
-  console.log(`[Recorder] Job completed: ${job.id}`);
+  log.info({ jobId: job.id }, 'Job completed');
 });
 
 worker.on('failed', (job, err) => {
-  console.error(`[Recorder] Job failed: ${job?.id} - ${err.message}`);
+  log.error({ jobId: job?.id, err }, 'Job failed');
 });
 
 async function shutdown(signal: string) {
-  console.log(`[Recorder] Received ${signal}. Shutting down gracefully...`);
+  log.info({ signal }, 'Shutting down gracefully');
   await worker.close();
   process.exit(0);
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-console.log(`[Recorder] Worker started. Listening on queue: ${RECORD_QUEUE_NAME}`);
+log.info({ queue: RECORD_QUEUE_NAME }, 'Worker started');
