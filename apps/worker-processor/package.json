@@ -8,17 +8,16 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@shwp-rec/config": "*",
     "@shwp-rec/db": "*",
     "@shwp-rec/queue": "*",
     "fluent-ffmpeg": "^2.1.2",
-    "@aws-sdk/client-s3": "^3.454.0",
-    "uuid": "^9.0.1"
+    "@aws-sdk/client-s3": "^3.454.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
     "ts-node": "^10.9.2",
     "@types/node": "^20.0.0",
-    "@types/fluent-ffmpeg": "^2.1.24",
-    "@types/uuid": "^9.0.7"
+    "@types/fluent-ffmpeg": "^2.1.24"
   }
 }

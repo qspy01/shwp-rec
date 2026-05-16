@@ -8,6 +8,7 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@shwp-rec/config": "*",
     "@shwp-rec/db": "*",
     "@shwp-rec/queue": "*",
     "playwright-extra": "^4.3.6",

@@ -3,6 +3,7 @@ import { chromium } from 'playwright-extra';
 import stealth from 'puppeteer-extra-plugin-stealth';
 import { prisma } from '@shwp-rec/db';
 import { REDIS_CONFIG, RECORD_QUEUE_NAME, PROCESS_QUEUE_NAME, RecordStreamJobData, ProcessMediaJobData } from '@shwp-rec/queue';
+import { env } from '@shwp-rec/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -124,7 +125,7 @@ const worker = new Worker<RecordStreamJobData>(
   processRecordJob,
   {
     connection: REDIS_CONFIG,
-    concurrency: parseInt(process.env.WORKER_CONCURRENCY || '2', 10), // Limit concurrent browsers
+    concurrency: env.WORKER_CONCURRENCY,
   }
 );
 

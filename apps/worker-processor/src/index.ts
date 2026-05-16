@@ -1,6 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import { prisma } from '@shwp-rec/db';
 import { REDIS_CONFIG, PROCESS_QUEUE_NAME, ProcessMediaJobData } from '@shwp-rec/queue';
+import { env } from '@shwp-rec/config';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,15 +9,15 @@ import ffmpeg from 'fluent-ffmpeg';
 
 const s3Client = new S3Client({
   region: 'us-east-1', // MinIO requires a region, even if dummy
-  endpoint: process.env.MINIO_ENDPOINT || 'http://localhost:9005',
+  endpoint: env.MINIO_ENDPOINT,
   credentials: {
-    accessKeyId: process.env.MINIO_ACCESS_KEY || 'admin',
-    secretAccessKey: process.env.MINIO_SECRET_KEY || 'password123',
+    accessKeyId: env.MINIO_ACCESS_KEY,
+    secretAccessKey: env.MINIO_SECRET_KEY,
   },
   forcePathStyle: true,
 });
 
-const BUCKET_NAME = process.env.MINIO_BUCKET || 'vods';
+const BUCKET_NAME = env.MINIO_BUCKET;
 
 async function uploadToMinIO(filePath: string, s3Key: string, contentType: string) {
   const fileStream = fs.createReadStream(filePath);
@@ -70,7 +71,7 @@ function getMetadata(filePath: string): Promise<any> {
   });
 }
 
-const CAPTURE_DIR = process.env.CAPTURE_DIR || '/tmp/shwp/captures';
+const CAPTURE_DIR = env.CAPTURE_DIR;
 
 async function processMediaJob(job: Job<ProcessMediaJobData>) {
   const { streamId, modelUsername } = job.data;
@@ -144,7 +145,7 @@ const worker = new Worker<ProcessMediaJobData>(
   processMediaJob,
   {
     connection: REDIS_CONFIG,
-    concurrency: parseInt(process.env.WORKER_CONCURRENCY || '2', 10),
+    concurrency: env.WORKER_CONCURRENCY,
   }
 );
 

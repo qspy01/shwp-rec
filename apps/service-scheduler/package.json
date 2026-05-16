@@ -10,6 +10,7 @@
   "dependencies": {
     "@bull-board/api": "^7.1.5",
     "@bull-board/express": "^7.1.5",
+    "@shwp-rec/config": "*",
     "@shwp-rec/db": "*",
     "@shwp-rec/queue": "*",
     "@types/express": "^5.0.6",

@@ -1,9 +1,11 @@
 export * from 'bullmq';
 
+import { env } from '@shwp-rec/config';
+
 export const REDIS_CONFIG = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6385', 10),
-  password: process.env.REDIS_PASSWORD || undefined,
+  host: env.REDIS_HOST,
+  port: env.REDIS_PORT,
+  password: env.REDIS_PASSWORD,
 };
 
 export const RECORD_QUEUE_NAME = 'record-stream';
