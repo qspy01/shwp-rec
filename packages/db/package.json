@@ -1,0 +1,20 @@
+{
+  "name": "@shwp-rec/db",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "prisma": "^6.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "service-scheduler",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@bull-board/api": "^7.1.5",
+    "@bull-board/express": "^7.1.5",
+    "@shwp-rec/db": "*",
+    "@shwp-rec/queue": "*",
+    "@types/express": "^5.0.6",
+    "express": "^5.2.1",
+    "playwright": "^1.40.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  }
+}

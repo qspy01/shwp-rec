@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Model {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  streams   Stream[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum StreamStatus {
+  RECORDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+}
+
+model Stream {
+  id           String       @id @default(uuid())
+  modelId      String
+  model        Model        @relation(fields: [modelId], references: [id])
+  status       StreamStatus @default(RECORDING)
+  startTime    DateTime     @default(now())
+  endTime      DateTime?
+  duration     Int?         // in seconds
+  resolution   String?
+  s3Key        String?
+  thumbnailKey String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([status])
+  @@index([modelId])
+}

@@ -32,3 +32,20 @@ complete/
 *.mp4
 *.exe
 *.dll
+
+# Monorepo
+node_modules/
+.turbo/
+dist/
+.next/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Captures
+captures/
+complete/
+converted/
