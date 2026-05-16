@@ -1,10 +1,6 @@
 import { Queue } from 'bullmq';
-import { chromium } from 'playwright-extra';
-import stealth from 'puppeteer-extra-plugin-stealth';
 import { prisma } from '@shwp-rec/db';
 import { REDIS_CONFIG, RECORD_QUEUE_NAME, PROCESS_QUEUE_NAME, RecordStreamJobData } from '@shwp-rec/queue';
-
-chromium.use(stealth());
 
 const SCAN_INTERVAL_MS = 60000; // 1 minute
 
@@ -14,14 +10,14 @@ const recordQueue = new Queue<RecordStreamJobData>(RECORD_QUEUE_NAME, {
 
 async function runScan() {
   console.log('[Scheduler] Starting scan...');
-  const browser = await chromium.launch({ headless: true });
-  
-  try {
-    const page = await browser.newPage();
-    console.log('[Scheduler] Loading homepage...');
-    await page.goto('https://showup.tv', { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    const html = await page.content();
+  try {
+    console.log('[Scheduler] Loading homepage...');
+    const res = await fetch('https://showup.tv', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; bot)' },
+    });
+    const html = await res.text();
+
     const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
     if (!match) {
       console.error('[Scheduler] Could not find __NEXT_DATA__ in homepage');
@@ -86,8 +82,6 @@ async function runScan() {
 
   } catch (error) {
     console.error('[Scheduler] Error during scan:', error);
-  } finally {
-    await browser.close();
   }
 }
 
@@ -121,6 +115,17 @@ async function start() {
   setInterval(() => {
     runScan().catch(console.error);
   }, SCAN_INTERVAL_MS);
+
+  process.on('SIGTERM', async () => {
+    console.log('[Scheduler] SIGTERM received. Closing...');
+    await recordQueue.close();
+    process.exit(0);
+  });
+  process.on('SIGINT', async () => {
+    console.log('[Scheduler] SIGINT received. Closing...');
+    await recordQueue.close();
+    process.exit(0);
+  });
 }
 
 start().catch(console.error);

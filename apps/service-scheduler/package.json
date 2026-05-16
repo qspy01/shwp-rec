@@ -13,10 +13,7 @@
     "@shwp-rec/db": "*",
     "@shwp-rec/queue": "*",
     "@types/express": "^5.0.6",
-    "express": "^5.2.1",
-    "playwright": "^1.40.0",
-    "playwright-extra": "^4.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "express": "^5.2.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

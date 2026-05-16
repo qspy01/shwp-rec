@@ -5,7 +5,6 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import * as fs from 'fs';
 import * as path from 'path';
 import ffmpeg from 'fluent-ffmpeg';
-import { v4 as uuidv4 } from 'uuid';
 
 const s3Client = new S3Client({
   region: 'us-east-1', // MinIO requires a region, even if dummy
@@ -71,15 +70,18 @@ function getMetadata(filePath: string): Promise<any> {
   });
 }
 
+const CAPTURE_DIR = process.env.CAPTURE_DIR || '/tmp/shwp/captures';
+
 async function processMediaJob(job: Job<ProcessMediaJobData>) {
-  const { streamId, rawFilePath, modelUsername } = job.data;
+  const { streamId, modelUsername } = job.data;
+  const rawFilePath = path.join(CAPTURE_DIR, `${streamId}.raw.mp4`);
   console.log(`[Processor] Processing stream ${streamId} for ${modelUsername}`);
 
   if (!fs.existsSync(rawFilePath)) {
     throw new Error(`Raw file not found: ${rawFilePath}`);
   }
 
-  const dir = path.dirname(rawFilePath);
+  const dir = CAPTURE_DIR;
   const outFilename = `${streamId}.mp4`;
   const thumbFilename = `${streamId}.jpg`;
   const outFilePath = path.join(dir, outFilename);
@@ -153,5 +155,13 @@ worker.on('completed', job => {
 worker.on('failed', (job, err) => {
   console.error(`[Processor] Job failed: ${job?.id} - ${err.message}`);
 });
+
+async function shutdown(signal: string) {
+  console.log(`[Processor] Received ${signal}. Shutting down gracefully...`);
+  await worker.close();
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 console.log(`[Processor] Worker started. Listening on queue: ${PROCESS_QUEUE_NAME}`);

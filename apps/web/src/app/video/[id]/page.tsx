@@ -1,6 +1,8 @@
 import { prisma } from '@shwp-rec/db';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 export default async function VideoPage({ params }: { params: { id: string } }) {
   const id = (await params).id;
   const stream = await prisma.stream.findUnique({

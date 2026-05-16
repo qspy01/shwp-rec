@@ -102,7 +102,6 @@ async function processRecordJob(job: Job<RecordStreamJobData>) {
     // Enqueue process job
     await processQueue.add('process', {
       streamId,
-      rawFilePath,
       modelUsername: username,
     }, {
       jobId: streamId,
@@ -136,5 +135,13 @@ worker.on('completed', job => {
 worker.on('failed', (job, err) => {
   console.error(`[Recorder] Job failed: ${job?.id} - ${err.message}`);
 });
+
+async function shutdown(signal: string) {
+  console.log(`[Recorder] Received ${signal}. Shutting down gracefully...`);
+  await worker.close();
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 console.log(`[Recorder] Worker started. Listening on queue: ${RECORD_QUEUE_NAME}`);

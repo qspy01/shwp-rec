@@ -2,6 +2,7 @@
   "name": "shwp-rec",
   "version": "3.0.0",
   "private": true,
+  "packageManager": "npm@9.2.0",
   "workspaces": [
     "apps/*",
     "packages/*"

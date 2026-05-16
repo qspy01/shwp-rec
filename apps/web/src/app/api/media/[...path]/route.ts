@@ -11,18 +11,27 @@ const s3Client = new S3Client({
   forcePathStyle: true,
 });
 
-export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const key = (await params).path.join('/');
+  const range = req.headers.get('range');
+
   try {
     const data = await s3Client.send(new GetObjectCommand({
       Bucket: process.env.MINIO_BUCKET || 'vods',
       Key: key,
+      ...(range ? { Range: range } : {}),
     }));
-    
+
+    const headers: Record<string, string> = {
+      'Content-Type': data.ContentType || 'application/octet-stream',
+      'Accept-Ranges': 'bytes',
+    };
+    if (data.ContentRange) headers['Content-Range'] = data.ContentRange;
+    if (data.ContentLength) headers['Content-Length'] = String(data.ContentLength);
+
     return new NextResponse(data.Body as any, {
-      headers: {
-        'Content-Type': data.ContentType || 'application/octet-stream',
-      },
+      status: range ? 206 : 200,
+      headers,
     });
   } catch (err) {
     return new NextResponse('Not found', { status: 404 });
