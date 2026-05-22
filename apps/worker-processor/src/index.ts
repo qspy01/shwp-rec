@@ -57,7 +57,6 @@ function generateHls(inputPath: string, hlsDir: string, streamId: string): Promi
         '-start_number 0',
         '-hls_time 10',
         '-hls_list_size 0',
-        '-hls_playlist_type VOD',
         '-hls_flags independent_segments',
         `-hls_segment_filename ${segmentPattern}`,
         '-f hls',

@@ -3,6 +3,10 @@ import { prisma } from '@shwp-rec/db';
 import { Prisma } from '@prisma/client';
 import { REDIS_CONFIG, RECORD_QUEUE_NAME, PROCESS_QUEUE_NAME, RecordStreamJobData } from '@shwp-rec/queue';
 import { createLogger } from '@shwp-rec/config';
+import { chromium } from 'playwright-extra';
+import stealth from 'puppeteer-extra-plugin-stealth';
+
+chromium.use(stealth());
 
 const log = createLogger('service-scheduler');
 
@@ -21,20 +25,19 @@ async function runScan() {
   scanRunning = true;
   log.info('Starting scan');
 
+  let browser;
   try {
     log.info('Loading homepage');
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    let res: Response;
-    try {
-      res = await fetch('https://showup.tv', {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; bot)' },
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-    const html = await res.text();
+    browser = await chromium.launch({
+      headless: true,
+      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+    const page = await browser.newPage();
+    await page.goto('https://showup.tv', { waitUntil: 'networkidle', timeout: 30000 });
+    const html = await page.content();
+    await browser.close();
+    browser = undefined;
 
     const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
     if (!match) {
@@ -114,6 +117,7 @@ async function runScan() {
   } catch (error) {
     log.error({ err: error }, 'Error during scan');
   } finally {
+    if (browser) await browser.close().catch(() => {});
     scanRunning = false;
   }
 }

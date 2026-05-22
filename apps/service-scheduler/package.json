@@ -17,7 +17,9 @@
     "@shwp-rec/queue": "*",
     "@types/express": "^5.0.6",
     "express": "^5.2.1",
-    "prom-client": "^15.1.3"
+    "playwright-extra": "^4.3.6",
+    "prom-client": "^15.1.3",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

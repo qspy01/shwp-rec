@@ -27,7 +27,11 @@ async function processRecordJob(job: Job<RecordStreamJobData>) {
   const rawFilePath = path.join(CAPTURE_DIR, `${streamId}.raw.mp4`);
   const fileStream = fs.createWriteStream(rawFilePath);
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
   const page = await browser.newPage();
 
   let lastChunkTime = Date.now();
