@@ -106,6 +106,8 @@ async function processRecordJob(job: Job<RecordStreamJobData>) {
     }, {
       jobId: streamId,
       removeOnComplete: true,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
     });
     log.info({ username, streamId }, 'Enqueued process job');
   } else {
@@ -139,6 +141,7 @@ worker.on('failed', (job, err) => {
 async function shutdown(signal: string) {
   log.info({ signal }, 'Shutting down gracefully');
   await worker.close();
+  await processQueue.close();
   process.exit(0);
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));

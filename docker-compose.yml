@@ -1,6 +1,18 @@
 version: '3.8'
 
+x-common-env: &common-env
+  DATABASE_URL: postgresql://postgres:SecurePassword123!@db:5432/shwprec
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_ACCESS_KEY: admin
+  MINIO_SECRET_KEY: password123
+  MINIO_BUCKET: vods
+  NODE_ENV: production
+
 services:
+  # ---- Infrastructure ----
+
   db:
     image: postgres:16-alpine
     environment:
@@ -23,6 +35,11 @@ services:
       - "127.0.0.1:6385:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   minio:
     image: minio/minio
@@ -51,11 +68,89 @@ services:
       /usr/bin/mc config host add myminio http://minio:9000 admin password123;
       /usr/bin/mc rm -r --force myminio/vods;
       /usr/bin/mc mb myminio/vods;
-      /usr/bin/mc anonymous set download myminio/vods;
       exit 0;
       "
+
+  # ---- Applications ----
+
+  service-scheduler:
+    build:
+      context: .
+      dockerfile: apps/service-scheduler/Dockerfile
+    environment:
+      <<: *common-env
+      CAPTURE_DIR: /tmp/shwp/captures
+      WORKER_CONCURRENCY: "2"
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-create-bucket:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-recorder:
+    build:
+      context: .
+      dockerfile: apps/worker-recorder/Dockerfile
+    environment:
+      <<: *common-env
+      CAPTURE_DIR: /captures
+      WORKER_CONCURRENCY: "2"
+    volumes:
+      - captures:/captures
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  worker-processor:
+    build:
+      context: .
+      dockerfile: apps/worker-processor/Dockerfile
+    environment:
+      <<: *common-env
+      CAPTURE_DIR: /captures
+      WORKER_CONCURRENCY: "2"
+      MAX_FFMPEG_CONCURRENCY: "2"
+    volumes:
+      - captures:/captures
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      <<: *common-env
+      SCHEDULER_URL: http://service-scheduler:3001
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   db_data:
   redis_data:
   minio_data:
+  captures:

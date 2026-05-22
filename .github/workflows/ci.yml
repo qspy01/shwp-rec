@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Lint · Typecheck · Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema=packages/db/prisma/schema.prisma
+
+      - name: Build packages
+        run: npx turbo build --filter=@shwp-rec/config --filter=@shwp-rec/db --filter=@shwp-rec/queue
+
+      - name: Typecheck
+        run: npx turbo typecheck
+
+      - name: Lint
+        run: npx turbo lint
+        continue-on-error: true
+
+      - name: Test
+        run: npx turbo test
+        env:
+          DATABASE_URL: postgresql://postgres:test@localhost/test
+          JWT_SECRET: ci-test-secret-32-bytes-long-xxxxxxxx
+          NODE_ENV: test

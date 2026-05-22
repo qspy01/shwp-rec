@@ -1,0 +1,14 @@
+.git
+.gitignore
+.editorconfig
+node_modules
+**/node_modules
+**/dist
+**/.next
+docs
+legacy
+*.md
+!README.md
+.env
+.env.*
+!.env.example

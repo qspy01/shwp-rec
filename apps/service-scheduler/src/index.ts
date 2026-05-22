@@ -1,24 +1,39 @@
 import { Queue } from 'bullmq';
 import { prisma } from '@shwp-rec/db';
+import { Prisma } from '@prisma/client';
 import { REDIS_CONFIG, RECORD_QUEUE_NAME, PROCESS_QUEUE_NAME, RecordStreamJobData } from '@shwp-rec/queue';
 import { createLogger } from '@shwp-rec/config';
 
 const log = createLogger('service-scheduler');
 
-const SCAN_INTERVAL_MS = 60000; // 1 minute
+const SCAN_INTERVAL_MS = 60000;
+let scanRunning = false;
 
 const recordQueue = new Queue<RecordStreamJobData>(RECORD_QUEUE_NAME, {
   connection: REDIS_CONFIG,
 });
 
 async function runScan() {
+  if (scanRunning) {
+    log.warn('Previous scan still running, skipping');
+    return;
+  }
+  scanRunning = true;
   log.info('Starting scan');
 
   try {
     log.info('Loading homepage');
-    const res = await fetch('https://showup.tv', {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; bot)' },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let res: Response;
+    try {
+      res = await fetch('https://showup.tv', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; bot)' },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
     const html = await res.text();
 
     const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
@@ -40,7 +55,9 @@ async function runScan() {
       include: { model: true },
     });
 
-    const activeUsernames = new Set(activeStreams.map(s => String((s.model as any).username).toLowerCase()));
+    const activeUsernames = new Set(
+      activeStreams.map((s: { model: { username: string } }) => s.model.username.toLowerCase())
+    );
 
     let enqueuedCount = 0;
 
@@ -50,34 +67,45 @@ async function runScan() {
       const aliasStreamKey = item.broadcast?.aliasStreamKey || null;
 
       if (!activeUsernames.has(username.toLowerCase())) {
-        // Find or create model in DB
-        const model = await prisma.model.upsert({
-          where: { username },
-          update: {},
-          create: { username },
-        });
+        let streamId: string;
 
-        // Create new stream record
-        const stream = await prisma.stream.create({
-          data: {
-            modelId: String((model as any).id),
-            status: 'RECORDING',
-          },
-        });
+        try {
+          const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            const model = await tx.model.upsert({
+              where: { username },
+              update: {},
+              create: { username },
+            });
+            const stream = await tx.stream.create({
+              data: { modelId: model.id, status: 'RECORDING' },
+            });
+            return { model, stream };
+          });
 
-        // Enqueue job
-        await recordQueue.add('record', {
-          uid: String(uid),
-          username: String(username),
-          aliasStreamKey,
-          streamId: String((stream as any).id),
-        }, {
-          jobId: String((stream as any).id), // Ensure idempotency
-          removeOnComplete: true,
-        });
+          streamId = result.stream.id;
+        } catch (dbErr) {
+          log.error({ username, err: dbErr }, 'DB transaction failed, skipping');
+          continue;
+        }
 
-        log.info({ username }, 'Enqueued recording');
-        enqueuedCount++;
+        try {
+          await recordQueue.add('record', {
+            uid: String(uid),
+            username: String(username),
+            aliasStreamKey,
+            streamId,
+          }, {
+            jobId: streamId,
+            removeOnComplete: true,
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5000 },
+          });
+          log.info({ username }, 'Enqueued recording');
+          enqueuedCount++;
+        } catch (queueErr) {
+          log.error({ username, streamId, err: queueErr }, 'Queue add failed, marking stream FAILED');
+          await prisma.stream.update({ where: { id: streamId }, data: { status: 'FAILED' } });
+        }
       }
     }
 
@@ -85,6 +113,35 @@ async function runScan() {
 
   } catch (error) {
     log.error({ err: error }, 'Error during scan');
+  } finally {
+    scanRunning = false;
+  }
+}
+
+async function sweepStaleStreams() {
+  const now = new Date();
+
+  const staleRecording = await prisma.stream.updateMany({
+    where: {
+      status: 'RECORDING',
+      startTime: { lt: new Date(now.getTime() - 3 * 60 * 60 * 1000) },
+    },
+    data: { status: 'FAILED' },
+  });
+
+  const staleProcessing = await prisma.stream.updateMany({
+    where: {
+      status: 'PROCESSING',
+      updatedAt: { lt: new Date(now.getTime() - 60 * 60 * 1000) },
+    },
+    data: { status: 'FAILED' },
+  });
+
+  if (staleRecording.count > 0 || staleProcessing.count > 0) {
+    log.warn(
+      { staleRecording: staleRecording.count, staleProcessing: staleProcessing.count },
+      'Swept stale streams'
+    );
   }
 }
 
@@ -92,11 +149,48 @@ import express from 'express';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
+import * as promClient from 'prom-client';
+
+const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
+function registerMetrics(recordQ: Queue, processQ: Queue) {
+  promClient.collectDefaultMetrics();
+
+  const queueDepthGauge = new promClient.Gauge({
+    name: 'bullmq_queue_depth',
+    help: 'Number of waiting jobs in a BullMQ queue',
+    labelNames: ['queue'] as const,
+  });
+
+  const activeJobsGauge = new promClient.Gauge({
+    name: 'bullmq_active_jobs',
+    help: 'Number of active (processing) jobs in a BullMQ queue',
+    labelNames: ['queue'] as const,
+  });
+
+  const failedJobsGauge = new promClient.Gauge({
+    name: 'bullmq_failed_jobs',
+    help: 'Number of failed jobs in a BullMQ queue',
+    labelNames: ['queue'] as const,
+  });
+
+  async function collect() {
+    for (const [name, queue] of [[RECORD_QUEUE_NAME, recordQ], [PROCESS_QUEUE_NAME, processQ]] as const) {
+      const counts = await queue.getJobCounts('waiting', 'active', 'failed').catch(() => ({ waiting: 0, active: 0, failed: 0 }));
+      queueDepthGauge.set({ queue: name }, counts.waiting ?? 0);
+      activeJobsGauge.set({ queue: name }, counts.active ?? 0);
+      failedJobsGauge.set({ queue: name }, counts.failed ?? 0);
+    }
+  }
+
+  return { collect };
+}
 
 async function start() {
   log.info({ redisHost: REDIS_CONFIG.host, redisPort: REDIS_CONFIG.port }, 'Service started');
 
   const processQueue = new Queue(PROCESS_QUEUE_NAME, { connection: REDIS_CONFIG });
+  const { collect } = registerMetrics(recordQueue, processQueue);
 
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath('/admin/queues');
@@ -106,18 +200,32 @@ async function start() {
   });
 
   const app = express();
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', uptime: process.uptime() });
+  });
+  app.get('/metrics', async (_req, res) => {
+    await collect();
+    res.set('Content-Type', promClient.register.contentType);
+    res.end(await promClient.register.metrics());
+  });
   app.use('/admin/queues', serverAdapter.getRouter());
   app.listen(3001, () => {
     log.info({ url: 'http://localhost:3001/admin/queues' }, 'Bull Board UI running');
   });
 
-  // Initial scan
+  // Initial scan and sweep
   await runScan();
+  await sweepStaleStreams().catch(err => log.error({ err }, 'Initial sweep error'));
 
-  // Schedule loop
+  // Scan loop
   setInterval(() => {
     runScan().catch(err => log.error({ err }, 'Unhandled scan error'));
   }, SCAN_INTERVAL_MS);
+
+  // Stale stream sweeper loop
+  setInterval(() => {
+    sweepStaleStreams().catch(err => log.error({ err }, 'Sweep error'));
+  }, SWEEP_INTERVAL_MS);
 
   process.on('SIGTERM', async () => {
     log.info('SIGTERM received, closing');

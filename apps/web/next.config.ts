@@ -1,11 +1,13 @@
 import type { NextConfig } from "next";
 
+const schedulerUrl = process.env.SCHEDULER_URL ?? 'http://localhost:3001';
+
 const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
         source: '/admin/queues/:path*',
-        destination: 'http://localhost:3001/admin/queues/:path*', // Proxy to Scheduler Express App
+        destination: `${schedulerUrl}/admin/queues/:path*`,
       },
     ];
   },
