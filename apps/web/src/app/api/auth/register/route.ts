@@ -17,7 +17,7 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
-  if (!checkRateLimit(`register:${ip}`, 5, 15 * 60 * 1000)) {
+  if (!await checkRateLimit(`register:${ip}`, 5, 15 * 60 * 1000)) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }
 

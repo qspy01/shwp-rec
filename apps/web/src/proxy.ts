@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAccessToken } from '@/lib/jwt';
 import { ACCESS_TOKEN_COOKIE } from '@/lib/cookies';
 
-const ADMIN_PREFIXES = ['/admin'];
+const ADMIN_PREFIXES = ['/admin', '/api/admin'];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -10,9 +10,11 @@ export async function proxy(request: NextRequest) {
   const requiresAdmin = ADMIN_PREFIXES.some((p) => pathname.startsWith(p));
   if (!requiresAdmin) return NextResponse.next();
 
+  const isApiRoute = pathname.startsWith('/api/');
   const token = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
 
   if (!token) {
+    if (isApiRoute) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('returnTo', pathname);
     return NextResponse.redirect(loginUrl);
@@ -20,6 +22,7 @@ export async function proxy(request: NextRequest) {
 
   const payload = await verifyAccessToken(token);
   if (!payload || payload.role !== 'ADMIN') {
+    if (isApiRoute) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('returnTo', pathname);
     return NextResponse.redirect(loginUrl);
@@ -32,5 +35,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: ['/admin/:path*', '/api/admin/:path*'],
 };

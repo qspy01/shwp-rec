@@ -5,6 +5,7 @@ import { REDIS_CONFIG, RECORD_QUEUE_NAME, PROCESS_QUEUE_NAME, RecordStreamJobDat
 import { createLogger } from '@shwp-rec/config';
 import { chromium } from 'playwright-extra';
 import stealth from 'puppeteer-extra-plugin-stealth';
+import { S3Client, ListObjectsV2Command, DeleteObjectsCommand, type ObjectIdentifier } from '@aws-sdk/client-s3';
 
 chromium.use(stealth());
 
@@ -156,6 +157,57 @@ async function sweepStaleStreams() {
   }
 }
 
+let _s3: S3Client | undefined;
+function getS3Client(): S3Client {
+  if (_s3) return _s3;
+  _s3 = new S3Client({
+    region: 'us-east-1',
+    endpoint: process.env.MINIO_ENDPOINT ?? 'http://localhost:9005',
+    credentials: {
+      accessKeyId: process.env.MINIO_ACCESS_KEY ?? 'admin',
+      secretAccessKey: process.env.MINIO_SECRET_KEY ?? 'password123',
+    },
+    forcePathStyle: true,
+  });
+  return _s3;
+}
+
+async function deleteStreamObjects(bucket: string, prefix: string): Promise<void> {
+  const s3 = getS3Client();
+  const listed = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix }));
+  const objects: ObjectIdentifier[] = (listed.Contents ?? []).map((o) => ({ Key: o.Key! }));
+  if (objects.length === 0) return;
+  await s3.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: objects, Quiet: true } }));
+}
+
+async function sweepExpiredVods() {
+  const retentionDays = parseInt(process.env.VOD_RETENTION_DAYS ?? '0', 10);
+  if (!retentionDays || retentionDays <= 0) return; // disabled
+
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  const bucket = process.env.MINIO_BUCKET ?? 'vods';
+
+  const expired = await prisma.stream.findMany({
+    where: { status: 'PUBLISHED', createdAt: { lt: cutoff } },
+    select: { id: true, model: { select: { username: true } } },
+  });
+
+  if (expired.length === 0) return;
+
+  log.info({ count: expired.length, retentionDays }, 'Sweeping expired VODs');
+
+  for (const stream of expired) {
+    try {
+      await deleteStreamObjects(bucket, `${stream.model.username}/${stream.id}`);
+      await prisma.stream.delete({ where: { id: stream.id } });
+    } catch (err) {
+      log.error({ streamId: stream.id, err }, 'Failed to delete expired VOD');
+    }
+  }
+
+  log.info({ deleted: expired.length }, 'Expired VOD sweep complete');
+}
+
 import express from 'express';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
@@ -227,6 +279,7 @@ async function start() {
   // Initial scan and sweep
   await runScan();
   await sweepStaleStreams().catch(err => log.error({ err }, 'Initial sweep error'));
+  await sweepExpiredVods().catch(err => log.error({ err }, 'Initial VOD retention sweep error'));
 
   // Scan loop
   setInterval(() => {
@@ -237,6 +290,12 @@ async function start() {
   setInterval(() => {
     sweepStaleStreams().catch(err => log.error({ err }, 'Sweep error'));
   }, SWEEP_INTERVAL_MS);
+
+  // VOD retention cleanup — runs daily
+  const VOD_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+  setInterval(() => {
+    sweepExpiredVods().catch(err => log.error({ err }, 'VOD retention sweep error'));
+  }, VOD_RETENTION_INTERVAL_MS);
 
   process.on('SIGTERM', async () => {
     log.info('SIGTERM received, closing');

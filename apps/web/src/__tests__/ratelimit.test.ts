@@ -2,34 +2,33 @@ import { describe, it, expect } from 'vitest';
 import { checkRateLimit } from '@/lib/ratelimit';
 
 describe('checkRateLimit', () => {
-  it('allows requests within the limit', () => {
+  it('allows requests within the limit', async () => {
     const key = `test-allow-${Date.now()}`;
-    expect(checkRateLimit(key, 3, 10000)).toBe(true);
-    expect(checkRateLimit(key, 3, 10000)).toBe(true);
-    expect(checkRateLimit(key, 3, 10000)).toBe(true);
+    expect(await checkRateLimit(key, 3, 10000)).toBe(true);
+    expect(await checkRateLimit(key, 3, 10000)).toBe(true);
+    expect(await checkRateLimit(key, 3, 10000)).toBe(true);
   });
 
-  it('blocks after limit is reached', () => {
+  it('blocks after limit is reached', async () => {
     const key = `test-block-${Date.now()}`;
-    checkRateLimit(key, 2, 10000);
-    checkRateLimit(key, 2, 10000);
-    expect(checkRateLimit(key, 2, 10000)).toBe(false);
-    expect(checkRateLimit(key, 2, 10000)).toBe(false);
+    await checkRateLimit(key, 2, 10000);
+    await checkRateLimit(key, 2, 10000);
+    expect(await checkRateLimit(key, 2, 10000)).toBe(false);
+    expect(await checkRateLimit(key, 2, 10000)).toBe(false);
   });
 
-  it('different keys have independent buckets', () => {
+  it('different keys have independent buckets', async () => {
     const k1 = `test-k1-${Date.now()}`;
     const k2 = `test-k2-${Date.now()}`;
-    checkRateLimit(k1, 1, 10000);
-    // k1 exhausted, k2 fresh
-    expect(checkRateLimit(k1, 1, 10000)).toBe(false);
-    expect(checkRateLimit(k2, 1, 10000)).toBe(true);
+    await checkRateLimit(k1, 1, 10000);
+    expect(await checkRateLimit(k1, 1, 10000)).toBe(false);
+    expect(await checkRateLimit(k2, 1, 10000)).toBe(true);
   });
 
   it('resets after window expires', async () => {
     const key = `test-reset-${Date.now()}`;
-    checkRateLimit(key, 1, 10); // 10ms window
+    await checkRateLimit(key, 1, 10); // 10ms window
     await new Promise<void>((r) => setTimeout(r, 30));
-    expect(checkRateLimit(key, 1, 10)).toBe(true);
+    expect(await checkRateLimit(key, 1, 10)).toBe(true);
   });
 });
