@@ -34,8 +34,14 @@ async function runScan() {
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
     const page = await browser.newPage();
-    await page.goto('https://showup.tv', { waitUntil: 'load', timeout: 30000 });
-    await page.waitForSelector('script#__NEXT_DATA__', { timeout: 15000 }).catch(() => {});
+    await page.goto('https://showup.tv', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForFunction(
+      () => {
+        const el = document.getElementById('__NEXT_DATA__');
+        return el !== null && el.textContent !== null && el.textContent.trim().length > 10;
+      },
+      { timeout: 30000 },
+    );
     const html = await page.content();
     await browser.close();
     browser = undefined;
