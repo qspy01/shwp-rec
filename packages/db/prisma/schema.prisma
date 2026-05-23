@@ -70,3 +70,15 @@ model RefreshToken {
   @@index([userId])
   @@index([tokenHash])
 }
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String
+  targetId  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}

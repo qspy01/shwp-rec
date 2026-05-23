@@ -40,11 +40,12 @@ async function deleteStreamFromStorage(bucket: string, prefix: string): Promise<
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  // Middleware already verified ADMIN role and set x-user-role header
+  // Middleware already verified ADMIN role and set x-user-id/x-user-role headers
   const { id } = await params;
+  const actorId = req.headers.get('x-user-id') ?? 'unknown';
 
   const stream = await prisma.stream.findUnique({
     where: { id },
@@ -65,6 +66,15 @@ export async function DELETE(
   }
 
   await prisma.stream.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: actorId,
+      action: 'stream.delete',
+      targetId: id,
+      metadata: { modelUsername: stream.model.username, streamStatus: stream.status },
+    },
+  });
 
   return NextResponse.json({ deleted: id });
 }
