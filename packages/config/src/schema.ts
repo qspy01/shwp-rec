@@ -10,7 +10,7 @@ export const envSchema = z.object({
   MINIO_SECRET_KEY: z.string().default('password123'),
   MINIO_BUCKET: z.string().default('vods'),
   CAPTURE_DIR: z.string().default('/tmp/shwp/captures'),
-  WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
+  WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),
   MAX_FFMPEG_CONCURRENCY: z.coerce.number().int().positive().default(2),
   NODE_ENV: z.enum(['production', 'development', 'test']).default('development'),
 });
