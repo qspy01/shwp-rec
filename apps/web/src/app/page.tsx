@@ -79,28 +79,35 @@ export default async function Home({
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {page.map((stream) => (
-              <Link key={stream.id} href={`/video/${stream.id}`} className="group block">
+              <div key={stream.id} className="group">
                 <Card className="overflow-hidden h-full transition-shadow hover:shadow-md">
-                  <div className="relative aspect-video bg-muted overflow-hidden">
-                    {stream.thumbnailKey ? (
-                      <img
-                        src={`/api/media/${stream.thumbnailKey}`}
-                        alt={`${stream.model.username} thumbnail`}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-muted-foreground text-sm">No thumbnail</span>
-                      </div>
-                    )}
-                    {stream.duration && (
-                      <Badge className="absolute bottom-2 right-2 bg-black/70 text-white border-0 text-xs">
-                        {formatDuration(stream.duration)}
-                      </Badge>
-                    )}
-                  </div>
+                  <Link href={`/video/${stream.id}`} className="block">
+                    <div className="relative aspect-video bg-muted overflow-hidden">
+                      {stream.thumbnailKey ? (
+                        <img
+                          src={`/api/media/${stream.thumbnailKey}`}
+                          alt={`${stream.model.username} thumbnail`}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <span className="text-muted-foreground text-sm">No thumbnail</span>
+                        </div>
+                      )}
+                      {stream.duration && (
+                        <Badge className="absolute bottom-2 right-2 bg-black/70 text-white border-0 text-xs">
+                          {formatDuration(stream.duration)}
+                        </Badge>
+                      )}
+                    </div>
+                  </Link>
                   <CardContent className="p-3">
-                    <p className="font-semibold truncate">{stream.model.username}</p>
+                    <Link
+                      href={`/models/${stream.model.username}`}
+                      className="font-semibold truncate block hover:underline underline-offset-2"
+                    >
+                      {stream.model.username}
+                    </Link>
                     <p className="text-muted-foreground text-xs mt-0.5">
                       {stream.createdAt.toLocaleDateString(undefined, {
                         year: 'numeric',
@@ -113,7 +120,7 @@ export default async function Home({
                     </p>
                   </CardContent>
                 </Card>
-              </Link>
+              </div>
             ))}
           </div>
 

@@ -3,21 +3,23 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const SAFE_KEY_RE = /^[a-zA-Z0-9_\-/. ]+$/;
 
+let _s3: S3Client | undefined;
+
 function getS3Client(): S3Client {
+  if (_s3) return _s3;
   const endpoint = process.env.MINIO_ENDPOINT;
   const accessKeyId = process.env.MINIO_ACCESS_KEY;
   const secretAccessKey = process.env.MINIO_SECRET_KEY;
-
   if (!endpoint || !accessKeyId || !secretAccessKey) {
     throw new Error('MINIO_ENDPOINT, MINIO_ACCESS_KEY, and MINIO_SECRET_KEY must be set');
   }
-
-  return new S3Client({
+  _s3 = new S3Client({
     region: 'us-east-1',
     endpoint,
     credentials: { accessKeyId, secretAccessKey },
     forcePathStyle: true,
   });
+  return _s3;
 }
 
 function inferContentType(key: string): string {

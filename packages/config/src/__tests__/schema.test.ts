@@ -11,7 +11,7 @@ describe('envSchema', () => {
       expect(result.data.REDIS_HOST).toBe('localhost');
       expect(result.data.REDIS_PORT).toBe(6385);
       expect(result.data.NODE_ENV).toBe('development');
-      expect(result.data.WORKER_CONCURRENCY).toBe(2);
+      expect(result.data.WORKER_CONCURRENCY).toBe(5);
     }
   });
 

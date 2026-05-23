@@ -43,4 +43,5 @@ RUN npx playwright install chromium
 ENV NODE_ENV=production
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
+USER 1000:1000
 CMD ["node", "apps/worker-recorder/dist/index.js"]

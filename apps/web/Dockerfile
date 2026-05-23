@@ -45,4 +45,5 @@ ENV PATH="/app/node_modules/.bin:${PATH}"
 EXPOSE 3000
 WORKDIR /app/apps/web
 
+USER 1000:1000
 CMD ["next", "start"]

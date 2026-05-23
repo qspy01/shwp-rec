@@ -31,7 +31,11 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
       </Link>
 
       <div className="mb-4">
-        <h1 className="text-2xl font-bold">{stream.model.username}</h1>
+        <h1 className="text-2xl font-bold">
+          <Link href={`/models/${stream.model.username}`} className="hover:underline underline-offset-2">
+            {stream.model.username}
+          </Link>
+        </h1>
         <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground flex-wrap">
           <span>
             {stream.createdAt.toLocaleDateString(undefined, {

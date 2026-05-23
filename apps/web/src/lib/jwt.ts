@@ -9,6 +9,7 @@ export interface JwtPayload {
 function getSecret(): Uint8Array {
   const s = process.env.JWT_SECRET;
   if (!s) throw new Error('JWT_SECRET environment variable is required');
+  if (s.length < 32) throw new Error('JWT_SECRET must be at least 32 characters');
   return new TextEncoder().encode(s);
 }
 

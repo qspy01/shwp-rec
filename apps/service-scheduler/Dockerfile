@@ -39,4 +39,5 @@ COPY --from=builder /app/apps/service-scheduler/dist ./apps/service-scheduler/di
 ENV NODE_ENV=production
 EXPOSE 3001
 
+USER 1000:1000
 CMD ["node", "apps/service-scheduler/dist/index.js"]

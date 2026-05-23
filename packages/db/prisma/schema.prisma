@@ -44,6 +44,8 @@ model Stream {
 
   @@index([status])
   @@index([modelId])
+  @@index([startTime])
+  @@index([updatedAt])
 }
 
 model User {

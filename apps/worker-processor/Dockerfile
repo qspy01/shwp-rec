@@ -41,4 +41,5 @@ COPY --from=builder /app/apps/worker-processor/dist ./apps/worker-processor/dist
 
 ENV NODE_ENV=production
 
+USER 1000:1000
 CMD ["node", "apps/worker-processor/dist/index.js"]
