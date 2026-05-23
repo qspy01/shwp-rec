@@ -34,7 +34,8 @@ async function runScan() {
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
     const page = await browser.newPage();
-    await page.goto('https://showup.tv', { waitUntil: 'networkidle', timeout: 30000 });
+    await page.goto('https://showup.tv', { waitUntil: 'load', timeout: 30000 });
+    await page.waitForSelector('script#__NEXT_DATA__', { timeout: 15000 }).catch(() => {});
     const html = await page.content();
     await browser.close();
     browser = undefined;
